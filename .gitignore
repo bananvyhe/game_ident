@@ -1,0 +1,13 @@
+.venv/
+logs/
+model-cache/
+.hf/
+__pycache__/
+*.log
+*.pid
+*.pyc
+.env
+.vscode/
+.idea/
+*.tmp
+*.bak

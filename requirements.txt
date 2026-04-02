@@ -1,0 +1,9 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+transformers==4.57.1
+accelerate==1.1.1
+pydantic==2.9.2
+python-dotenv==1.0.1
+sentencepiece==0.2.0
+safetensors==0.4.5
+hf_xet==1.4.2
