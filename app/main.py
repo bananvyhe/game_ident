@@ -59,7 +59,7 @@ class Settings(BaseModel):
         "MINER_LAUNCH_PATH",
         os.getenv("MINER_WRAPPER_PATH", r"C:\cofex\translation\start_onezerominer_wrapper.cmd"),
     )
-    miner_restart_delay_sec: int = int(os.getenv("MINER_RESTART_DELAY_SEC", "15"))
+    miner_restart_delay_sec: int = int(os.getenv("MINER_RESTART_DELAY_SEC", "180"))
     translation_health_url: str = os.getenv("TRANSLATION_HEALTH_URL", "http://127.0.0.1:8008/health")
     translation_health_timeout_sec: float = float(os.getenv("TRANSLATION_HEALTH_TIMEOUT_SEC", "2.0"))
     worker_timeout_sec: float = float(os.getenv("WORKER_TIMEOUT_SEC", "300"))
@@ -255,6 +255,8 @@ class GameIdentifier:
             return
 
         try:
+            was_running = self._miner_is_running()
+            self._log(f"[miner] stop requested; running_before={was_running}")
             stop_path = self._resolve_miner_stop_path()
             if stop_path is not None:
                 self._log(f"[miner] stopping via {stop_path}")
@@ -274,6 +276,8 @@ class GameIdentifier:
                 stderr=subprocess.DEVNULL,
                 check=False,
             )
+            is_running = self._miner_is_running()
+            self._log(f"[miner] stop finished; running_after={is_running}")
         except Exception as exc:
             self._log(f"[miner] stop failed: {exc}")
 
@@ -316,6 +320,7 @@ class GameIdentifier:
                 stderr=subprocess.DEVNULL,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
+            self._log(f"[miner] start issued; running_after={self._miner_is_running()}")
         except Exception as exc:
             self._log(f"[miner] start failed: {exc}")
 
