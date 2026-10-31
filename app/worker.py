@@ -119,14 +119,36 @@ class Worker:
 
         return cleaned
 
+    @staticmethod
+    def _has_game_evidence(entity_type: object, evidence: object, body_text: str) -> bool:
+        if not isinstance(entity_type, str) or entity_type.strip().lower() != "video_game":
+            return False
+        if not isinstance(evidence, str) or not evidence.strip():
+            return False
+        normalize = lambda value: re.sub(r"\s+", " ", value).strip().casefold()
+        normalized_evidence = normalize(evidence)
+        return normalized_evidence in normalize(body_text)
+
     def _build_messages(self, article_id: int, body_text: str, request_id: str, task: str) -> list[dict]:
         system_prompt = (
             "You are a flexible news article analysis service for video games. "
             "Follow the user's task instruction, but never violate the output contract. "
             "Return only a JSON object with these keys: "
-            "\"article_id\", \"identified_game_name\", \"confidence\", \"external_game_id\", \"slug\". "
-            "Rules: use the English game name when asked to identify a game, never invent a title, and set "
-            "\"identified_game_name\" to \"unknown\" with low confidence when the game cannot be determined confidently. "
+            "\"article_id\", \"identified_game_name\", \"confidence\", \"external_game_id\", \"slug\", \"entity_type\", \"game_evidence\". "
+            "Rules: identify only a specific video game explicitly mentioned or clearly supported by the article. "
+            "Return the base/parent game's title, not the name of an update, expansion, chapter, season, playtest, alpha phase, or event. "
+            "When an article is about game content, find the game that content belongs to and return that game. "
+            "For example, in an article about Soulframe's \"Preludes 17: Verse of the Veilands\", return \"Soulframe\": "
+            "\"Preludes\" is its pre-alpha phase and \"Verse of the Veilands\" is an update, not a separate game. "
+            "A company, developer, studio, publisher, platform, product, person, or franchise name is not a game title by itself. "
+            "Do not return a company or studio name as the game, even if it is the main subject of the news. "
+            "Inspect the entire article text, including its headline/title when present. For a valid title, set entity_type to "
+            "\"video_game\" and game_evidence to an exact, brief quote from body_text that supports the identification. "
+            "A headline may contain only the game's name without the word game; that is valid evidence when the name is a known, "
+            "specific video game. The quote must be copied verbatim from body_text. "
+            "A quote that merely mentions a company, studio, publisher, platform, product, person, or franchise is not evidence. "
+            "If this exact evidence is unavailable, set identified_game_name to \"unknown\", entity_type to \"unknown\", "
+            "and game_evidence to an empty string. Never infer a game from a company name or invent a title. "
             "Confidence must be a number from 0 to 1."
         )
         task_prompt = (task or "").strip() or (
@@ -222,6 +244,8 @@ class Worker:
         confidence = 0.0
         external_game_id = None
         slug = None
+        entity_type = "unknown"
+        game_evidence = ""
 
         if isinstance(parsed, dict):
             raw_name = parsed.get("identified_game_name") or parsed.get("game_name") or parsed.get("name")
@@ -229,11 +253,16 @@ class Worker:
             identified_game_name = self._normalize_identified_game_name(raw_name, confidence)
             external_game_id = parsed.get("external_game_id")
             slug = parsed.get("slug")
+            entity_type = parsed.get("entity_type")
+            game_evidence = parsed.get("game_evidence")
         else:
             fallback = self._trim_text(decoded)
             if fallback:
-                confidence = 0.55
-                identified_game_name = self._normalize_identified_game_name(fallback, confidence)
+                identified_game_name = "unknown"
+
+        if identified_game_name != "unknown" and not self._has_game_evidence(entity_type, game_evidence, body_text):
+            identified_game_name = "unknown"
+            confidence = min(confidence, 0.25)
 
         if confidence < self.settings.min_confidence:
             identified_game_name = "unknown"
@@ -254,6 +283,8 @@ class Worker:
             "confidence": confidence,
             "external_game_id": external_game_id if external_game_id is None or isinstance(external_game_id, (str, int)) else str(external_game_id),
             "slug": slug if slug is None or isinstance(slug, str) else str(slug),
+            "entity_type": entity_type if isinstance(entity_type, str) else "unknown",
+            "game_evidence": game_evidence if isinstance(game_evidence, str) else "",
         }
 
 
